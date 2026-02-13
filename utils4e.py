@@ -5,7 +5,6 @@ import collections
 import collections.abc
 import functools
 import heapq
-import operator
 import os.path
 import random
 from itertools import chain, combinations
@@ -14,13 +13,79 @@ from statistics import mean
 import numpy as np
 
 
+# part1. General data structures and their functions
+# ______________________________________________________________________________
+# Queues: Stack, FIFOQueue, PriorityQueue
+# Stack and FIFOQueue are implemented as list and collection.deque
+# PriorityQueue is implemented here
+
+
+class PriorityQueue:
+    """A Queue in which the minimum (or maximum) element (as determined by f and order) is returned first.
+    If order is 'min', the item with minimum f(x) is
+    returned first; if order is 'max', then it is the item with maximum f(x).
+    Also supports dict-like lookup."""
+
+    def __init__(self, order='min', f=lambda x: x):
+        self.heap = []
+
+        if order == 'min':
+            self.f = f
+        elif order == 'max':  # now item with max f(x)
+            self.f = lambda x: -f(x)  # will be popped first
+        else:
+            raise ValueError("Order must be either 'min' or 'max'.")
+
+    def append(self, item):
+        """Insert item at its correct position."""
+        heapq.heappush(self.heap, (self.f(item), item))
+
+    def extend(self, items):
+        """Insert each item in items at its correct position."""
+        for item in items:
+            self.append(item)
+
+    def pop(self):
+        """Pop and return the item (with min or max f(x) value)
+        depending on the order."""
+        if self.heap:
+            return heapq.heappop(self.heap)[1]
+        else:
+            raise Exception('Trying to pop from empty PriorityQueue.')
+
+    def __len__(self):
+        """Return current capacity of PriorityQueue."""
+        return len(self.heap)
+
+    def __contains__(self, key):
+        """Return True if the key is in PriorityQueue."""
+        return any([item == key for _, item in self.heap])
+
+    def __getitem__(self, key):
+        """Returns the first value associated with key in PriorityQueue.
+        Raises KeyError if key is not present."""
+        for value, item in self.heap:
+            if item == key:
+                return value
+        raise KeyError(str(key) + " is not in the priority queue")
+
+    def __delitem__(self, key):
+        """Delete the first occurrence of key."""
+        try:
+            del self.heap[[item == key for _, item in self.heap].index(True)]
+        except ValueError:
+            raise KeyError(str(key) + " is not in the priority queue")
+        heapq.heapify(self.heap)
+
+
 # ______________________________________________________________________________
 # Functions on Sequences and Iterables
 
 
 def sequence(iterable):
     """Converts iterable to sequence, if it is not already one."""
-    return iterable if isinstance(iterable, collections.abc.Sequence) else tuple([iterable])
+    return (iterable if isinstance(iterable, collections.abc.Sequence)
+            else tuple([iterable]))
 
 
 def remove_all(item, seq):
@@ -102,6 +167,7 @@ def flatten(seqs):
 # ______________________________________________________________________________
 # argmin and argmax
 
+
 identity = lambda x: x
 
 
@@ -122,8 +188,8 @@ def shuffled(iterable):
     return items
 
 
+# part2. Mathematical and Statistical util functions
 # ______________________________________________________________________________
-# Statistical and mathematical functions
 
 
 def histogram(values, mode=0, bin_function=None):
@@ -143,35 +209,38 @@ def histogram(values, mode=0, bin_function=None):
         return sorted(bins.items())
 
 
-def dot_product(x, y):
-    """Return the sum of the element-wise product of vectors x and y."""
-    return sum(_x * _y for _x, _y in zip(x, y))
-
-
 def element_wise_product(x, y):
-    """Return vector as an element-wise product of vectors x and y."""
-    assert len(x) == len(y)
-    return np.multiply(x, y)
-
-
-def matrix_multiplication(x, *y):
-    """Return a matrix as a matrix-multiplication of x and arbitrary number of matrices *y."""
-
-    result = x
-    for _y in y:
-        result = np.matmul(result, _y)
-
-    return result
+    if hasattr(x, '__iter__') and hasattr(y, '__iter__'):
+        assert len(x) == len(y)
+        return [element_wise_product(_x, _y) for _x, _y in zip(x, y)]
+    elif hasattr(x, '__iter__') == hasattr(y, '__iter__'):
+        return x * y
+    else:
+        raise Exception('Inputs must be in the same size!')
 
 
 def vector_add(a, b):
     """Component-wise addition of two vectors."""
-    return tuple(map(operator.add, a, b))
+    if not (a and b):
+        return a or b
+    if hasattr(a, '__iter__') and hasattr(b, '__iter__'):
+        assert len(a) == len(b)
+        return list(map(vector_add, a, b))
+    else:
+        try:
+            return a + b
+        except TypeError:
+            raise Exception('Inputs must be in the same size!')
 
 
 def scalar_vector_product(x, y):
-    """Return vector as a product of a scalar and a vector"""
-    return np.multiply(x, y)
+    """Return vector as a product of a scalar and a vector recursively."""
+    return [scalar_vector_product(x, _y) for _y in y] if hasattr(y, '__iter__') else x * y
+
+
+def map_vector(f, x):
+    """Apply function f to iterable x."""
+    return [map_vector(f, _x) for _x in x] if hasattr(x, '__iter__') else list(map(f, [x]))[0]
 
 
 def probability(p):
@@ -184,6 +253,7 @@ def weighted_sample_with_replacement(n, seq, weights):
     probability of each element in proportion to its corresponding
     weight."""
     sample = weighted_sampler(seq, weights)
+
     return [sample() for _ in range(n)]
 
 
@@ -192,12 +262,13 @@ def weighted_sampler(seq, weights):
     totals = []
     for w in weights:
         totals.append(w + totals[-1] if totals else w)
+
     return lambda: seq[bisect.bisect(totals, random.uniform(0, totals[-1]))]
 
 
 def weighted_choice(choices):
     """A weighted version of random.choice"""
-    # NOTE: should be replaced by random.choices if we port to Python 3.6
+    # NOTE: Should be replaced by random.choices if we port to Python 3.6
 
     total = sum(w for _, w in choices)
     r = random.uniform(0, total)
@@ -218,7 +289,8 @@ def rounder(numbers, d=4):
 
 
 def num_or_str(x):  # TODO: rename as `atom`
-    """The argument is a string; convert to a number if possible, or strip it."""
+    """The argument is a string; convert to a number if
+       possible, or strip it."""
     try:
         return int(x)
     except ValueError:
@@ -240,28 +312,34 @@ def hamming_distance(x, y):
     return sum(_x != _y for _x, _y in zip(x, y))
 
 
-def cross_entropy_loss(x, y):
-    return (-1.0 / len(x)) * sum(_x * np.log(_y) + (1 - _x) * np.log(1 - _y) for _x, _y in zip(x, y))
-
-
-def mean_squared_error_loss(x, y):
-    return (1.0 / len(x)) * sum((_x - _y) ** 2 for _x, _y in zip(x, y))
-
-
 def rms_error(x, y):
     return np.sqrt(ms_error(x, y))
 
 
 def ms_error(x, y):
-    return mean((_x - _y) ** 2 for _x, _y in zip(x, y))
+    return mean((x - y) ** 2 for x, y in zip(x, y))
 
 
 def mean_error(x, y):
-    return mean(abs(_x - _y) for _x, _y in zip(x, y))
+    return mean(abs(x - y) for x, y in zip(x, y))
 
 
 def mean_boolean_error(x, y):
     return mean(_x != _y for _x, _y in zip(x, y))
+
+
+# part3. Neural network util functions
+# ______________________________________________________________________________
+
+
+def cross_entropy_loss(x, y):
+    """Cross entropy loss function. x and y are 1D iterable objects."""
+    return (-1.0 / len(x)) * sum(x * np.log(_y) + (1 - _x) * np.log(1 - _y) for _x, _y in zip(x, y))
+
+
+def mean_squared_error_loss(x, y):
+    """Min square loss function. x and y are 1D iterable objects."""
+    return (1.0 / len(x)) * sum((_x - _y) ** 2 for _x, _y in zip(x, y))
 
 
 def normalize(dist):
@@ -280,55 +358,33 @@ def random_weights(min_value, max_value, num_weights):
     return [random.uniform(min_value, max_value) for _ in range(num_weights)]
 
 
-def sigmoid(x):
-    """Return activation value of x with sigmoid function."""
-    return 1 / (1 + np.exp(-x))
+def conv1D(x, k):
+    """1D convolution. x: input vector; K: kernel vector."""
+    return np.convolve(x, k, mode='same')
 
 
-def sigmoid_derivative(value):
-    return value * (1 - value)
+def gaussian_kernel(size=3):
+    return [gaussian((size - 1) / 2, 0.1, x) for x in range(size)]
 
 
-def elu(x, alpha=0.01):
-    return x if x > 0 else alpha * (np.exp(x) - 1)
+def gaussian_kernel_1D(size=3, sigma=0.5):
+    return [gaussian((size - 1) / 2, sigma, x) for x in range(size)]
 
 
-def elu_derivative(value, alpha=0.01):
-    return 1 if value > 0 else alpha * np.exp(value)
-
-
-def tanh(x):
-    return np.tanh(x)
-
-
-def tanh_derivative(value):
-    return 1 - (value ** 2)
-
-
-def leaky_relu(x, alpha=0.01):
-    return x if x > 0 else alpha * x
-
-
-def leaky_relu_derivative(value, alpha=0.01):
-    return 1 if value > 0 else alpha
-
-
-def relu(x):
-    return max(0, x)
-
-
-def relu_derivative(value):
-    return 1 if value > 0 else 0
+def gaussian_kernel_2D(size=3, sigma=0.5):
+    x, y = np.mgrid[-size // 2 + 1:size // 2 + 1, -size // 2 + 1:size // 2 + 1]
+    g = np.exp(-((x ** 2 + y ** 2) / (2.0 * sigma ** 2)))
+    return g / g.sum()
 
 
 def step(x):
-    """Return activation value of x with sign function"""
+    """Return activation value of x with sign function."""
     return 1 if x >= 0 else 0
 
 
 def gaussian(mean, st_dev, x):
     """Given the mean and standard deviation of a distribution, it returns the probability of x."""
-    return 1 / (np.sqrt(2 * np.pi) * st_dev) * np.e ** (-0.5 * (float(x - mean) / st_dev) ** 2)
+    return 1 / (np.sqrt(2 * np.pi) * st_dev) * np.exp(-0.5 * (float(x - mean) / st_dev) ** 2)
 
 
 def linear_kernel(x, y=None):
@@ -353,6 +409,7 @@ def rbf_kernel(x, y=None, gamma=None):
                             np.sum(x * x, axis=1).reshape((-1, 1)) + np.sum(y * y, axis=1).reshape((1, -1))))
 
 
+# part4. Self defined data structures
 # ______________________________________________________________________________
 # Grid Functions
 
@@ -389,6 +446,7 @@ def distance_squared(a, b):
 
 # ______________________________________________________________________________
 # Misc Functions
+
 
 class injection:
     """Dependency injection of temporary values for global functions/classes/etc.
@@ -455,11 +513,13 @@ def print_table(table, header=None, sep='   ', numfmt='{}'):
 
     table = [[numfmt.format(x) if isnumber(x) else x for x in row]
              for row in table]
-
-    sizes = list(map(lambda seq: max(map(len, seq)), list(zip(*[map(str, row) for row in table]))))
+    sizes = list(
+        map(lambda seq: max(map(len, seq)),
+            list(zip(*[map(str, row) for row in table]))))
 
     for row in table:
-        print(sep.join(getattr(str(x), j)(size) for (j, size, x) in zip(justs, sizes, row)))
+        print(sep.join(getattr(
+            str(x), j)(size) for (j, size, x) in zip(justs, sizes, row)))
 
 
 def open_data(name, mode='r'):
@@ -483,6 +543,7 @@ def failure_test(algorithm, tests):
 
 # See https://docs.python.org/3/reference/expressions.html#operator-precedence
 # See https://docs.python.org/3/reference/datamodel.html#special-method-names
+
 
 class Expr:
     """A mathematical expression with an operator and 0 or more arguments.
@@ -599,7 +660,7 @@ class Expr:
 
     # Equality and repr
     def __eq__(self, other):
-        """x == y' evaluates to True or False; does not build an Expr."""
+        """'x == y' evaluates to True or False; does not build an Expr."""
         return isinstance(other, Expr) and self.op == other.op and self.args == other.args
 
     def __lt__(self, other):
@@ -678,7 +739,10 @@ def expr(x):
     >>> expr('P & Q ==> Q')
     ((P & Q) ==> Q)
     """
-    return eval(expr_handle_infix_ops(x), defaultkeydict(Symbol)) if isinstance(x, str) else x
+    if isinstance(x, str):
+        return eval(expr_handle_infix_ops(x), defaultkeydict(Symbol))
+    else:
+        return x
 
 
 infix_ops = '==> <== <=>'.split()
@@ -714,67 +778,20 @@ class hashabledict(dict):
 
 
 # ______________________________________________________________________________
-# Queues: Stack, FIFOQueue, PriorityQueue
-# Stack and FIFOQueue are implemented as list and collection.deque
-# PriorityQueue is implemented here
+# Monte Carlo tree node and ucb function
 
 
-class PriorityQueue:
-    """A Queue in which the minimum (or maximum) element (as determined by f and
-    order) is returned first.
-    If order is 'min', the item with minimum f(x) is
-    returned first; if order is 'max', then it is the item with maximum f(x).
-    Also supports dict-like lookup."""
+class MCT_Node:
+    """Node in the Monte Carlo search tree, keeps track of the children states."""
 
-    def __init__(self, order='min', f=lambda x: x):
-        self.heap = []
-        if order == 'min':
-            self.f = f
-        elif order == 'max':  # now item with max f(x)
-            self.f = lambda x: -f(x)  # will be popped first
-        else:
-            raise ValueError("Order must be either 'min' or 'max'.")
+    def __init__(self, parent=None, state=None, U=0, N=0):
+        self.__dict__.update(parent=parent, state=state, U=U, N=N)
+        self.children = {}
+        self.actions = None
 
-    def append(self, item):
-        """Insert item at its correct position."""
-        heapq.heappush(self.heap, (self.f(item), item))
 
-    def extend(self, items):
-        """Insert each item in items at its correct position."""
-        for item in items:
-            self.append(item)
-
-    def pop(self):
-        """Pop and return the item (with min or max f(x) value)
-        depending on the order."""
-        if self.heap:
-            return heapq.heappop(self.heap)[1]
-        else:
-            raise Exception('Trying to pop from empty PriorityQueue.')
-
-    def __len__(self):
-        """Return current capacity of PriorityQueue."""
-        return len(self.heap)
-
-    def __contains__(self, key):
-        """Return True if the key is in PriorityQueue."""
-        return any([item == key for _, item in self.heap])
-
-    def __getitem__(self, key):
-        """Returns the first value associated with key in PriorityQueue.
-        Raises KeyError if key is not present."""
-        for value, item in self.heap:
-            if item == key:
-                return value
-        raise KeyError(str(key) + " is not in the priority queue")
-
-    def __delitem__(self, key):
-        """Delete the first occurrence of key."""
-        try:
-            del self.heap[[item == key for _, item in self.heap].index(True)]
-        except ValueError:
-            raise KeyError(str(key) + " is not in the priority queue")
-        heapq.heapify(self.heap)
+def ucb(n, C=1.4):
+    return np.inf if n.N == 0 else n.U / n.N + C * np.sqrt(np.log(n.parent.N) / n.N)
 
 
 # ______________________________________________________________________________
