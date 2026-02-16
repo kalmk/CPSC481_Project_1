@@ -1,77 +1,64 @@
 from probability4e import *
-
 T, F = True, False
 
 
 class Diagnostics:
-    """ Use a Bayesian network to diagnose between three lung diseases """
 
     def __init__(self):
-        # Create the Bayesian network
+
         self.bn = BayesNet([
-            ('Asia', '', 0.01),
+
+            ('VisitAsia', '', 0.01),
             ('Smoking', '', 0.5),
 
-            ('TB', 'Asia',
-             {(T,): 0.05,
-              (F,): 0.01}),
+            ('TB', 'VisitAsia', {T: 0.05, F: 0.01}),
+            ('Cancer', 'Smoking', {T: 0.1, F: 0.01}),
+            ('Bronchitis', 'Smoking', {T: 0.6, F: 0.3}),
 
-            ('Cancer', 'Smoking',
-             {(T,): 0.6,
-              (F,): 0.3}),
-
-            ('Bronchitis', 'Smoking',
-             {(T,): 0.6,
-              (F,): 0.3}),
-
-            ('TBorC', 'TB Cancer',
-             {(T, T): 1.0,
-              (T, F): 1.0,
+            ('TBorCancer', 'TB Cancer',
+             {
+                 (T, T): 1.0,
+                 (T, F): 1.0,
                  (F, T): 1.0,
-                 (F, F): 0.0}),
+                 (F, F): 0.0
+             }),
 
-            ('Xray', 'TBorC',
-             {(T,): 0.99,
-              (F,): 0.05}),
+            ('Xray', 'TBorCancer', {T: 0.98, F: 0.05}),
 
-            ('Dyspnea', 'TBorC Bronchitis',
-             {(T, T): 0.9,
-              (T, F): 0.7,
+            ('Dyspnea', 'TBorCancer Bronchitis',
+             {
+                 (T, T): 0.9,
+                 (T, F): 0.7,
                  (F, T): 0.8,
-                 (F, F): 0.1})
+                 (F, F): 0.1
+             })
         ])
 
     def diagnose(self, asia, smoking, xray, dyspnea):
-        # Convert string inputs to Boolean/None
-        def convert(val, positive):
-            if val == "NA":
-                return None
-            elif val == positive:
-                return T
-            else:
-                return F
 
         evidence = {}
-        a = convert(asia, "Yes")
-        if a is not None:
-            evidence['Asia'] = a
-        s = convert(smoking, "Yes")
-        if s is not None:
-            evidence['Smoking'] = s
-        x = convert(xray, "Abnormal")
-        if x is not None:
-            evidence['Xray'] = x
-        d = convert(dyspnea, "Present")
-        if d is not None:
-            evidence['Dyspnea'] = d
 
-        # Compute probability for each disease
-        diseases = ['Bronchitis', 'Cancer', 'TB']
-        probs = {}
+        if asia != "NA":
+            evidence['VisitAsia'] = (asia == "Yes")
 
-        for disease in diseases:
-            Q = enumeration_ask(disease, evidence, self.bn)
-            probs[disease] = Q[T]
+        if smoking != "NA":
+            evidence['Smoking'] = (smoking == "Yes")
 
-        max_disease = max(probs, key=probs.get)
-        return [max_disease.lower(), probs[max_disease]]
+        if xray != "NA":
+            evidence['Xray'] = (xray == "Abnormal")
+
+        if dyspnea != "NA":
+            evidence['Dyspnea'] = (dyspnea == "Present")
+
+        tb = enumeration_ask('TB', evidence, self.bn)[T]
+        cancer = enumeration_ask('Cancer', evidence, self.bn)[T]
+        bronchitis = enumeration_ask('Bronchitis', evidence, self.bn)[T]
+
+        probs = {
+            "tb": tb,
+            "cancer": cancer,
+            "bronchitis": bronchitis
+        }
+
+        disease = max(probs, key=probs.get)
+        return [disease, probs[disease]]
