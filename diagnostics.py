@@ -23,7 +23,7 @@ class Diagnostics:
                  (F, F): 0.0
              }),
 
-            ('Xray', 'TBorCancer', {T: 0.98, F: 0.05}),
+            ('Xray', 'TBorCancer', {T: 0.99, F: 0.05}),
 
             ('Dyspnea', 'TBorCancer Bronchitis',
              {
@@ -61,4 +61,6 @@ class Diagnostics:
         }
 
         disease = max(probs, key=probs.get)
-        return [disease, probs[disease]]
+        probability = round(probs[disease], 3)
+
+        return [disease, probability]
